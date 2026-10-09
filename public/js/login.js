@@ -1,0 +1,7 @@
+const params=new URLSearchParams(location.search); const role=params.get('role')==='teacher'?'teacher':'student';
+const title=document.getElementById('loginTitle'); const subtitle=document.getElementById('loginSubtitle'); const icon=document.getElementById('roleIcon');
+title.textContent=role==='teacher'?'Teacher Login':'Student Login'; subtitle.textContent=role==='teacher'?'Sign in to manage students and publish results.':'Sign in to view your results and progress.'; icon.className=role==='teacher'?'fa-solid fa-chalkboard-user':'fa-solid fa-user-graduate';
+document.getElementById(role==='teacher'?'teacherRole':'studentRole').classList.add('active');
+document.getElementById('demoCredentials').textContent=role==='teacher'?'teacher@example.com / Teacher@123':'student@example.com / Student@123';
+document.getElementById('togglePassword').addEventListener('click',()=>{const p=document.getElementById('password');p.type=p.type==='password'?'text':'password'});
+document.getElementById('loginForm').addEventListener('submit',async e=>{e.preventDefault(); const msg=document.getElementById('loginMessage'); msg.textContent='Signing in...'; try{const data=await api('/auth/login',{method:'POST',body:{email:document.getElementById('email').value,password:document.getElementById('password').value,role}}); saveSession(data); location.href=role==='teacher'?'/teacher.html':'/student.html';}catch(err){msg.textContent=err.message;}});

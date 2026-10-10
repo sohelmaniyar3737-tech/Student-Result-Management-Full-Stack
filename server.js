@@ -16,6 +16,9 @@ const pool = new Pool({
   database: process.env.PGDATABASE || 'student_result_manager',
   user: process.env.PGUSER || 'postgres',
   password: process.env.PGPASSWORD || '',
+  ssl: process.env.PGHOST
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 app.use(cors());

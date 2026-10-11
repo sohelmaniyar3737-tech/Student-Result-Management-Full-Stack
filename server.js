@@ -226,11 +226,69 @@ app.post('/api/students', auth, allow('teacher'), async (req, res) => {
     if (!validEmail(normalizedEmail)) return res.status(400).json({ message: 'Please enter a valid email address.' });
     if (String(password).length < 6) return res.status(400).json({ message: 'Student password must be at least 6 characters.' });
     await client.query('BEGIN');
-    const existing = await client.query('SELECT id FROM users WHERE email = $1 UNION SELECT id FROM students WHERE student_id = $2 OR roll_number = $3 OR email = $1 LIMIT 1', [normalizedEmail, String(studentId).trim(), String(rollNumber).trim()]);
-    if (existing.rows[0]) { await client.query('ROLLBACK'); return res.status(409).json({ message: 'A student with this email, ID or roll number already exists.' }); }
-    const hashed = await bcrypt.hash(password, 12);
-    const user = await client.query('INSERT INTO users (name,email,password,role) VALUES ($1,$2,$3,$4) RETURNING id,name,email,role', [String(name).trim(), normalizedEmail, hashed, 'student']);
-    const student = await client.query('INSERT INTO students (user_id,student_id,name,email,roll_number,course,semester) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,student_id,name,email,roll_number,course,semester', [user.rows[0].id, String(studentId).trim(), String(name).trim(), normalizedEmail, String(rollNumber).trim(), course || 'BCA', semester || 'Semester 6']);
+    
+const existingUserResult = await client.query(
+  `SELECT id, role
+   FROM users
+   WHERE LOWER(email) = $1
+   LIMIT 1`,
+  [normalizedEmail]
+);
+
+let userId;
+
+if (existingUserResult.rows.length > 0) {
+  const existingUser = existingUserResult.rows[0];
+
+  if (existingUser.role !== 'student') {
+    await client.query('ROLLBACK');
+    return res.status(409).json({
+      message: 'This email belongs to a non-student account.'
+    });
+  }
+
+  // Reuse the existing student login account.
+  userId = existingUser.id;
+} else {
+  // Create a login account only when one does not already exist.
+  const hashed = await bcrypt.hash(password, 12);
+
+  const user = await client.query(
+    `INSERT INTO users (name, email, password, role)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id`,
+    [String(name).trim(), normalizedEmail, hashed, 'student']
+  );
+
+  userId = user.rows[0].id;
+}
+
+// Prevent duplicate student IDs, roll numbers, emails,
+// or a second profile for the same login account.
+const duplicateStudent = await client.query(
+  `SELECT id
+   FROM students
+   WHERE user_id = $1
+      OR student_id = $2
+      OR roll_number = $3
+      OR LOWER(email) = $4
+   LIMIT 1`,
+  [
+    userId,
+    String(studentId).trim(),
+    String(rollNumber).trim(),
+    normalizedEmail
+  ]
+);
+
+if (duplicateStudent.rows.length > 0) {
+  await client.query('ROLLBACK');
+  return res.status(409).json({
+    message: 'This account or student ID, email, or roll number already has a student record.'
+  });
+}
+
+    const student = await client.query('INSERT INTO students (user_id,student_id,name,email,roll_number,course,semester) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,student_id,name,email,roll_number,course,semester', [userId, String(studentId).trim(), String(name).trim(), normalizedEmail, String(rollNumber).trim(), course || 'BCA', semester || 'Semester 6']);
     await client.query('COMMIT');
     res.status(201).json({ message: 'Student account created successfully.', student: { _id: student.rows[0].id, ...student.rows[0] } });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ message: 'Could not create student.', error: err.message }); }

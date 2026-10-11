@@ -43,7 +43,7 @@ async function seed() {
       );
     `);
 
-    await client.query('TRUNCATE result_subjects, results, students, subjects, users RESTART IDENTITY CASCADE');
+    // Keep existing database records; do not clear tables.
 
     const teacherPassword = await bcrypt.hash('Teacher@123', 12);
     const studentPassword = await bcrypt.hash('Student@123', 12);
